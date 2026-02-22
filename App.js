@@ -25,6 +25,7 @@ const CheckoutScreen = () => {
         merchantDisplayName: '美味しいお肉屋さん',
         paymentIntentClientSecret: paymentIntent,
         defaultBillingDetails: { name: 'テスト 太郎' },
+        primaryButtonLabel: '購入する',
       });
 
       if (!error) {

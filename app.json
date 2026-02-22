@@ -13,7 +13,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "CFBundleAllowMixedLocalizations": true,
+        "CFBundleDevelopmentRegion": "ja"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -26,7 +30,16 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      ["@stripe/stripe-react-native",{"merchantIdentifier":"merchant.com.mymeatshop","enableGooglePay":false}]
-    ]
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.mymeatshop",
+          "enableGooglePay": false
+        }
+      ]
+    ],
+    "locales": {
+      "ja": "./languages/ja.json"
+    }
   }
 }
