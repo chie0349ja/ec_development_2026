@@ -6,13 +6,15 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
-  SafeAreaView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useStripe, StripeProvider } from '@stripe/stripe-react-native';
 import { StatusBar } from 'expo-status-bar';
 import axios from 'axios';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
+const SAVED_BILLING_KEY = 'savedBillingDetails';
 
 const PRODUCTS = [
   { id: '1', name: '極上の和牛セット', price: 1000 },
@@ -60,22 +62,40 @@ const CheckoutScreen = () => {
   const handlePurchase = async () => {
     if (cart.length === 0 || totalAmount < 100) return;
     setLoading(true);
+    const forceLoadingFalse = () => setLoading((prev) => (prev ? false : prev));
+    const safetyTimer = setTimeout(forceLoadingFalse, 90000); // 90秒で強制的にボタン復帰
     try {
-      const response = await axios.post(`${API_URL}/payment-sheet`, {
-        amount: totalAmount,
-      });
-      const { paymentIntent } = response.data;
+      const response = await axios.post(
+        `${API_URL}/payment-sheet`,
+        { amount: totalAmount },
+        { timeout: 15000 }
+      );
+      const { paymentIntent, paymentIntentId } = response.data;
+
+      let defaultBillingDetails = { name: 'テスト 太郎' };
+      try {
+        const saved = await AsyncStorage.getItem(SAVED_BILLING_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && (parsed.name || parsed.address || parsed.phone)) {
+            defaultBillingDetails = parsed;
+          }
+        }
+      } catch (_) {}
 
       const { error } = await initPaymentSheet({
         merchantDisplayName: '美味しいお肉屋さん',
         paymentIntentClientSecret: paymentIntent,
-        defaultBillingDetails: { name: 'テスト 太郎' },
+        defaultBillingDetails,
         primaryButtonLabel: '購入する',
+        billingDetailsCollectionConfiguration: {
+          address: 'full',
+          phone: 'always',
+        },
       });
 
       if (error) {
         Alert.alert('エラー', error.message);
-        setLoading(false);
         return;
       }
 
@@ -83,14 +103,32 @@ const CheckoutScreen = () => {
 
       if (presentError) {
         Alert.alert(`エラー: ${presentError.code}`, presentError.message);
-      } else {
-        Alert.alert('成功', '決済が完了しました！');
-        setCart([]);
+        return;
       }
+
+      try {
+        const detailsRes = await axios.get(
+          `${API_URL}/payment-details/${paymentIntentId}`,
+          { timeout: 10000 }
+        );
+        const billingDetails = detailsRes.data;
+        if (billingDetails && (billingDetails.name || billingDetails.address || billingDetails.phone)) {
+          await AsyncStorage.setItem(SAVED_BILLING_KEY, JSON.stringify(billingDetails));
+        }
+      } catch (e) {
+        console.log('Failed to save billing details', e);
+      }
+      Alert.alert('成功', '決済が完了しました！');
+      setCart([]);
     } catch (e) {
       console.log(e);
-      Alert.alert('エラー', 'サーバーに接続できませんでした');
+      if (e.code === 'ECONNABORTED' || e.message?.includes('timeout')) {
+        Alert.alert('タイムアウト', 'サーバーに接続できませんでした。ネットワークとmeat-serverの起動を確認してください。');
+      } else {
+        Alert.alert('エラー', 'サーバーに接続できませんでした');
+      }
     } finally {
+      clearTimeout(safetyTimer);
       setLoading(false);
     }
   };

@@ -23,8 +23,28 @@ app.post('/payment-sheet', async (req, res) => {
 
     res.json({
       paymentIntent: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id,
     });
   } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/payment-details/:paymentIntentId', async (req, res) => {
+  try {
+    const pi = await stripe.paymentIntents.retrieve(req.params.paymentIntentId, {
+      expand: ['payment_method'],
+    });
+    const pm = pi.payment_method;
+    if (!pm || typeof pm !== 'object' || !pm.billing_details) {
+      return res.status(404).json({ error: 'billing details not found' });
+    }
+    const { name, phone, address } = pm.billing_details;
+    res.json({ name, phone, address });
+  } catch (e) {
+    if (e.code === 'resource_missing') {
+      return res.status(404).json({ error: e.message });
+    }
     res.status(500).json({ error: e.message });
   }
 });
