@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -12,6 +12,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useStripe, StripeProvider } from '@stripe/stripe-react-native';
 import { StatusBar } from 'expo-status-bar';
 import axios from 'axios';
+import { supabase } from './lib/supabase';
+import AuthScreen from './screens/AuthScreen';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 const SAVED_BILLING_KEY = 'savedBillingDetails';
@@ -24,7 +26,7 @@ const PRODUCTS = [
   { id: '5', name: 'ラムチョップ', price: 1200 },
 ];
 
-const CheckoutScreen = () => {
+const CheckoutScreen = ({ onLogout }) => {
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const [cart, setCart] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -202,17 +204,55 @@ const CheckoutScreen = () => {
           </>
         )}
       </ScrollView>
+      {onLogout && (
+        <View style={styles.logoutContainer}>
+          <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
+            <Text style={styles.logoutText}>ログアウト</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       <StatusBar style="auto" />
     </SafeAreaView>
   );
 };
 
 export default function App() {
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    const initAuth = async () => {
+      const { data } = await supabase.auth.getSession();
+      setSession(data.session ?? null);
+      setAuthLoading(false);
+    };
+
+    initAuth();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
+
   return (
     <StripeProvider
       publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY}
     >
-      <CheckoutScreen />
+      {authLoading ? null : session ? (
+        <CheckoutScreen onLogout={handleLogout} />
+      ) : (
+        <AuthScreen />
+      )}
     </StripeProvider>
   );
 }
@@ -345,5 +385,22 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  logoutContainer: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    backgroundColor: '#fff',
+  },
+  logoutButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#eee',
+    alignItems: 'center',
+  },
+  logoutText: {
+    fontSize: 16,
+    color: '#333',
   },
 });
